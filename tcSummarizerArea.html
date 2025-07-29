@@ -1,10 +1,71 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Summary</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 10px;
+            background: #fff;
+        }
+        .summary-card {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 15px;
+            background: #f9f9f9;
+        }
+        .summary-card a {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #0066cc;
+            text-decoration: none;
+        }
+        .summary-card a:hover {
+            text-decoration: underline;
+        }
+        ul.pros li::marker {
+            color: green;
+        }
+        ul.cons li::marker {
+            color: red;
+        }
+        .rating {
+            font-size: 0.9em;
+            color: #666;
+            display: block;
+            margin-top: 5px;
+        }
+        .pros-bubble {
+        background: #e6f7e6; /* light green */
+        border-radius: 6px;
+        padding: 8px;
+        margin-top: 8px;
+        }
+        .cons-bubble {
+        background: #fdeaea; /* light red */
+        border-radius: 6px;
+        padding: 8px;
+        margin-top: 8px;
+        }
+        ul.pros li::marker { color: green; }
+        ul.cons li::marker { color: red; }
+    </style>
+
+    <meta charset="UTF-8">
+    <title><b>Summary</b></title>
+    <style>
+      body { font-family: sans-serif; padding: 10px; }
+      h1 { font-size: 18px; }
+      #terms-list { list-style: none; padding-left: 0; }
+      #terms-list li { margin-bottom: 15px; }
+      #terms-list a { color: blue; text-decoration: underline; font-weight: bold; }
+      .terms-text { max-height: 200px; overflow-y: auto; background: #f0f0f0; padding: 5px; margin-top: 5px; white-space: pre-wrap; }
+    </style>
   </head>
   <body>
-    <h1>All sites sidepanel extension</h1>
-    <p>This side panel is enabled on all sites</p>
+    <h1><b><i>Terms and Conditions Summary</i></b></h1>
+    <ul id="terms-list"></ul>
+    <script src="tcSummarizerArea.js"></script>
   </body>
 </html>
+

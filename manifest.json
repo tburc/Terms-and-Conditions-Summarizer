@@ -1,25 +1,29 @@
 {
-  "name": "AI Terms and Conditions Summarizer",
+  "name": "TurboTerms",
   "description": "This extension summarizes those pesky terms and conditions for you using AI!",
   "version": "1.0",
   "manifest_version": 3,
 
-  "permissions": ["tabs", "sidePanel"],
+  "permissions": ["storage", "tabs", "sidePanel"],
   "host_permissions": ["<all_urls>"],
 
-  "side_panel": {
-    "default_path": "tcSummarizerArea.html"},
+  "side_panel": { "default_path": "tcSummarizerArea.html" },
+
   "background": {
     "service_worker": "sidebar.js"
   },
 
   "action": {
-    "default_popup": "intro.html",
-    "default_icon": "extension_logo.png"
+    "default_icon": "TurboTerms Logo.png"
   },
-  
+
+  "web_accessible_resources": [{
+    "resources": ["tcSummarizerArea.js"],
+    "matches": ["<all_urls>"]
+  }],
+
   "content_scripts": [{
-  "matches": ["<all_urls>"],
-  "js": ["contentScript.js"]
-}]
+    "matches": ["<all_urls>"],
+    "js": ["contentScript.js"]
+  }]
 }
