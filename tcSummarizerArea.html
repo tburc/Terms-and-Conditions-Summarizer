@@ -36,23 +36,108 @@
             margin-top: 5px;
         }
         .pros-bubble {
-        background: #e6f7e6; /* light green */
-        border-radius: 6px;
-        padding: 8px;
-        margin-top: 8px;
+            background: #e6f7e6; /* light green */
+            border-radius: 6px;
+            padding: 8px;
+            margin-top: 8px;
         }
         .cons-bubble {
-        background: #fdeaea; /* light red */
-        border-radius: 6px;
-        padding: 8px;
-        margin-top: 8px;
+            background: #fdeaea; /* light red */
+            border-radius: 6px;
+            padding: 8px;
+            margin-top: 8px;
         }
         ul.pros li::marker { color: green; }
         ul.cons li::marker { color: red; }
+
+        .tabs {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #ddd;
+            box-shadow: 0px 1px 4px rgba(0,0,0,0.1);
+        }
+        .tabs button {
+            flex: 1;
+            padding: 10px;
+            background: #f1f1f1;
+            border: none;
+            border-bottom: 3px solid transparent;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s ease, border-bottom 0.2s ease;
+        }
+        .tabs button:hover {
+            background: #e4e4e4;
+        }
+        .tabs button.active {
+            background: #fff;
+            border-bottom: 3px solid #007bff;
+            color: #007bff;
+        }
+
+
+        /* Modernize buttons */
+button {
+  background: #007bff;
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  margin-top: 5px;
+  font-size: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+  button:hover {
+    background: #0069d9;
+  }
+
+  button:active {
+    transform: scale(0.97);
+  }
+
+  /* Modernize dropdown */
+  select {
+    padding: 8px;
+    font-size: 14px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    transition: border 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 4px rgba(0, 123, 255, 0.5);
+  }
+
+  /* Call to Action styling */
+#call-to-action-content {
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#call-to-action-content h3 {
+  margin-top: 0;
+  color: #007bff;
+}
+
+#call-to-action-content p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+}
     </style>
 
     <meta charset="UTF-8">
-    <title><b>Summary</b></title>
+    <title>Summary</title>
     <style>
       body { font-family: sans-serif; padding: 10px; }
       h1 { font-size: 18px; }
@@ -66,6 +151,46 @@
     <h1><b><i>Terms and Conditions Summary</i></b></h1>
     <ul id="terms-list"></ul>
     <script src="tcSummarizerArea.js"></script>
+
+   <!-- Tabs at the bottom for Ask Questions, Familiarity, and Call to Action -->
+<div class="tabs" style="margin-top:20px;">
+  <button id="questions-tab" class="active">Ask Questions</button>
+  <button id="settings-tab">Familiarity</button>
+  <button id="call-to-action-tab">Call to Action</button>
+</div>
+
+<div id="tab-content">
+  <div id="questions-content">
+    <h3>Ask a question about the policy:</h3>
+    <textarea id="question-input" rows="3" style="width:100%;"></textarea>
+    <button id="ask-btn">Ask</button>
+    <div id="question-response" style="margin-top:10px; white-space:pre-wrap;"></div>
+  </div>
+
+  <div id="settings-content" style="display:none;">
+    <h3>Select your familiarity level:</h3>
+    <select id="familiarity-dropdown">
+      <option value="none">No knowledge</option>
+      <option value="limited">Limited knowledge</option>
+      <option value="some">Some knowledge</option>
+      <option value="expert">Expert level knowledge</option>
+    </select>
+  </div>
+
+  <div id="call-to-action-content" style="display:none;">
+    <h3>What you can do to protect your privacy:</h3>
+    <p style="line-height:1.5;">
+      Take charge of your online privacy by reviewing and limiting app permissions, using 
+      privacy-focused browsers and search engines, enabling two-factor authentication, 
+      and adjusting social media privacy settings. Consider using a VPN to mask your 
+      location and encrypt traffic. Support privacy legislation by contacting your local 
+      representatives or mayor, and stay informed about your digital rights. Where possible, 
+      opt out of unnecessary data sharing and regularly review the privacy settings of your 
+      devices and accounts.
+    </p>
+  </div>
+</div>
+
+    <script src="tcSummarizerArea.js"></script>
   </body>
 </html>
-
