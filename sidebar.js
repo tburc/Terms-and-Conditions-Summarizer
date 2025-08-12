@@ -1,77 +1,100 @@
+// ===== Cloudflare Worker base URL (no trailing slash) =====
+const WORKER_BASE = "YOUR_WORKER";
 
+// In-memory cache of cleaned policy text used for summaries
+let LAST_POLICY_TEXT = "";
 
+// -------- helper: summarize via Worker ----------
 async function summarizeText(text, familiarityLevel) {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const resp = await fetch(`${WORKER_BASE}/summarize`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${OPENAI_API_KEY}`
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "user",
-          content: `Knowledge level is: ${familiarityLevel}. Tailor your response directly directly based on this knowledge level.
-Summarize this text in under 170 words, highlighting the privacy concerns, but also be extremely extremely detailed and don't be generic at all. NEVER SAY THINGS LIKE: "raises concerns about data privacy", "Lacks transparency", "promoting accesability", "various privacy concerns" or other general terminology or similar phrases. Do NOT use ANY external knowledge about the company/website in question that may bias results. ONLY use the policies. Format strictly as: Pros: - [pro point] - [pro point] Cons: - [con point] - [con point] Rating: [X/10] [reasoning in one sentence] Do not include any other headings, summaries, or introductory text. ${text}`
-        }
-      ],
-      temperature: 0.6
-    })
+      text: text.slice(0, 4000),
+      familiarityLevel: familiarityLevel || "none",
+    }),
   });
-
-  const data = await response.json();
-  console.log("OpenAI raw response:", data);
-
-  if (data.error) {
-    return `Summary failed (OpenAI error: ${data.error.message})`;
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    console.error("Summarize worker error:", data);
+    return `Summary failed (${data.error || resp.status})`;
   }
-  if (!data.choices || !data.choices.length) {
-    return "Summary failed (no choices returned)";
-  }
-  return data.choices[0].message?.content || "Summary failed (no content)";
+  return data.content || "Summary failed (no content)";
 }
 
+// Persist cache so Ask works even after service worker restarts
+function setPersistedPolicyText(text) {
+  LAST_POLICY_TEXT = text || "";
+  try {
+    chrome.storage.local.set({ lastPolicyText: LAST_POLICY_TEXT });
+  } catch {}
+}
+async function getPersistedPolicyText() {
+  if (LAST_POLICY_TEXT && LAST_POLICY_TEXT.trim()) return LAST_POLICY_TEXT;
+  const data = await new Promise((resolve) =>
+    chrome.storage.local.get(["lastPolicyText"], resolve)
+  );
+  return (data.lastPolicyText || "").toString();
+}
+
+// -------- Chrome Action: open side panel + summarize ----------
 chrome.action.onClicked.addListener((tab) => {
-  chrome.sidePanel.open({ tabId: tab.id }).then(() => {
-    chrome.tabs.sendMessage(tab.id, { collectLinks: true }, async (response) => {
-      if (!response || !response.links) return;
+  chrome.sidePanel
+    .open({ tabId: tab.id })
+    .then(() => {
+      chrome.tabs.sendMessage(tab.id, { collectLinks: true }, async (response) => {
+        if (!response || !response.links) return;
 
-      // Fetch familiarity level from storage
-      chrome.storage.sync.get(["familiarityLevel"], async (data) => {
-        const familiarityLevel = data.familiarityLevel || "none";
+        // Fetch familiarity level from storage
+        chrome.storage.sync.get(["familiarityLevel"], async (data) => {
+          const familiarityLevel = data.familiarityLevel || "none";
 
-        const results = await Promise.all(response.links.map(async (link) => {
+          const cleanedTexts = []; // collect all cleaned texts for caching
+
+          const results = await Promise.all(
+            response.links.map(async (link) => {
+              try {
+                const res = await fetch(link.href);
+                const html = await res.text();
+                const cleanText = html
+                  .replace(/<script[\s\S]*?<\/script>/gi, "")
+                  .replace(/<style[\s\S]*?<\/style>/gi, "")
+                  .replace(/<[^>]+>/g, " ")
+                  .replace(/\s+/g, " ")
+                  .trim();
+
+                if (cleanText) cleanedTexts.push(cleanText);
+
+                const summary = await summarizeText(cleanText, familiarityLevel);
+                return { ...link, summary };
+              } catch (e) {
+                console.error("Fetch/summarize error:", e);
+                return { ...link, summary: "Failed to fetch or summarize terms content." };
+              }
+            })
+          );
+
+          // Update caches with the exact text we summarized
+          const joined = cleanedTexts.join("\n\n");
+          setPersistedPolicyText(joined);
           try {
-            const res = await fetch(link.href);
-            const html = await res.text();
-            const cleanText = html
-              .replace(/<script[\s\S]*?<\/script>/gi, "")
-              .replace(/<style[\s\S]*?<\/style>/gi, "")
-              .replace(/<[^>]+>/g, " ")
-              .replace(/\s+/g, " ")
-              .trim();
+            console.log("Cached policy text length:", joined.length);
+          } catch {}
 
-            const summary = await summarizeText(cleanText.slice(0, 4000), familiarityLevel);
-            return { ...link, summary };
-          } catch (e) {
-            return { ...link, summary: "Failed to fetch or summarize terms content." };
-          }
-        }));
-
-        chrome.runtime.sendMessage({ showTerms: results });
+          chrome.runtime.sendMessage({ showTerms: results });
+        });
       });
-    });
-  }).catch(err => console.error("Failed to open panel:", err));
+    })
+    .catch((err) => console.error("Failed to open panel:", err));
 });
 
-
+// -------- Ask Questions plumbing ----------
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.askQuestion) {
-    handleAskQuestion(msg.askQuestion).then(answer => {
+    handleAskQuestion(msg.askQuestion).then((answer) => {
       sendResponse({ answer });
     });
-    return true; // keeps the channel open
+    return true; // keep the channel open
   }
 });
 
@@ -83,61 +106,105 @@ function getFamiliarity() {
   });
 }
 
+// Call the Worker /ask endpoint
+async function askViaWorker(question, combinedText, familiarityLevel) {
+  const trimmed = (combinedText || "").slice(0, 30000);
+  console.log("Q&A sending length to worker:", trimmed.length);
+  const resp = await fetch(`${WORKER_BASE}/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      question,
+      combinedText: trimmed, // worker trims further if needed
+      familiarityLevel: familiarityLevel || "none",
+    }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    console.error("Ask worker error:", resp.status, data);
+    if (resp.status === 422 && data && typeof data.receivedChars !== "undefined") {
+      return `Couldn’t read the policy text on this site (received ${data.receivedChars} chars). Try opening the policy page directly and running the summary again.`;
+    }
+    return `Failed to get an answer (${data.error || resp.status}).`;
+  }
+  return data.content || "Failed to get an answer.";
+}
+
+// Fallback: grab visible text from the current page (as a last resort)
+async function getVisiblePageText(tabId) {
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        // Basic visible text scrape
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+        let out = "";
+        while (walker.nextNode()) {
+          const t = walker.currentNode.nodeValue;
+          if (t && t.trim().length > 0) out += t + " ";
+        }
+        return out.replace(/\s+/g, " ").trim();
+      },
+    });
+    return (result || "").toString();
+  } catch (e) {
+    console.error("Visible text scrape failed:", e);
+    return "";
+  }
+}
+
 async function handleAskQuestion(question) {
   try {
     const familiarityLevel = await getFamiliarity();
 
-    // Get active tab
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    // 1) Use persisted cache first (same exact text as summaries)
+    let policyText = await getPersistedPolicyText();
+    if (policyText && policyText.trim().length > 0) {
+      console.log("Using cached policy text for Q&A. Length:", policyText.length);
+      return await askViaWorker(question, policyText, familiarityLevel);
+    }
 
-    // Collect all policy links (same as summary process)
+    // 2) Fallback: re-collect from links (for users who ask before running summary)
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const linksResponse = await new Promise((resolve) => {
       chrome.tabs.sendMessage(tab.id, { collectLinks: true }, resolve);
     });
 
     const links = linksResponse?.links || [];
-    if (!links.length) return "No policy links found to answer from.";
+    if (links.length) {
+      const texts = await Promise.all(
+        links.map(async (link) => {
+          try {
+            const res = await fetch(link.href);
+            const html = await res.text();
+            return html
+              .replace(/<script[\s\S]*?<\/script>/gi, "")
+              .replace(/<style[\s\S]*?<\/style>/gi, "")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+          } catch {
+            return "";
+          }
+        })
+      );
+      policyText = texts.filter(Boolean).join("\n\n");
+      if (policyText.trim().length > 0) {
+        // hydrate caches so future questions are immediate
+        setPersistedPolicyText(policyText);
+        console.log("Using fetched link text for Q&A. Length:", policyText.length);
+        return await askViaWorker(question, policyText, familiarityLevel);
+      }
+    }
 
-    // Fetch and clean all link texts
-    const texts = await Promise.all(
-      links.map(async (link) => {
-        try {
-          const res = await fetch(link.href);
-          const html = await res.text();
-          return html
-            .replace(/<script[\s\S]*?<\/script>/gi, "")
-            .replace(/<style[\s\S]*?<\/style>/gi, "")
-            .replace(/<[^>]+>/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
-        } catch {
-          return "";
-        }
-      })
-    );
+    // 3) Last resort: visible text from current page
+    const visible = await getVisiblePageText(tab.id);
+    if (visible && visible.length > 500) {
+      console.log("Using visible page text fallback. Length:", visible.length);
+      return await askViaWorker(question, visible, familiarityLevel);
+    }
 
-    const combinedText = texts.filter(Boolean).join("\n\n");
-
-    const prompt = `Knowledge level is: ${familiarityLevel}. Limit your answer to 100 words.
-Answer the following question based ONLY on these policy texts:
-${combinedText.slice(0, 12000)}
-Question: ${question}`;
-
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.5
-      })
-    });
-
-    const data = await response.json();
-    return data?.choices?.[0]?.message?.content || "Failed to get an answer.";
+    return "Couldn’t read the policy text on this site. Try opening the policy or privacy page itself and click the extension again to build the summary first.";
   } catch (e) {
     console.error(e);
     return "Failed to process question.";
